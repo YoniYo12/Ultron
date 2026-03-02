@@ -199,6 +199,39 @@ class GestureRecognizer:
         dz = center1[2] - center2[2]
         
         return math.sqrt(dx*dx + dy*dy + dz*dz)
+    
+    def both_hands_pinching(self, hand1_landmarks, hand2_landmarks):
+        """
+        Check if both hands are pinching (two-hand control mode).
+        
+        Args:
+            hand1_landmarks: First hand landmarks
+            hand2_landmarks: Second hand landmarks
+            
+        Returns:
+            bool: True if both hands are pinching
+        """
+        return self.is_pinching(hand1_landmarks) and self.is_pinching(hand2_landmarks)
+    
+    def get_two_hand_center(self, hand1_landmarks, hand2_landmarks):
+        """
+        Get the midpoint between two hands.
+        
+        Args:
+            hand1_landmarks: First hand landmarks
+            hand2_landmarks: Second hand landmarks
+            
+        Returns:
+            tuple: (x, y, z) midpoint between hands
+        """
+        center1 = self.get_hand_center(hand1_landmarks)
+        center2 = self.get_hand_center(hand2_landmarks)
+        
+        return (
+            (center1[0] + center2[0]) / 2,
+            (center1[1] + center2[1]) / 2,
+            (center1[2] + center2[2]) / 2
+        )
 
 
 if __name__ == "__main__":

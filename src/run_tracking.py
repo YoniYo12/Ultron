@@ -69,7 +69,7 @@ class TrackingThread:
             hands_info = self.tracker.get_hand_info()
             
             if hands_info:
-                # Use first detected hand
+                # Use first detected hand for control
                 hand = hands_info[0]
                 landmarks = hand['landmarks']
                 
@@ -89,12 +89,14 @@ class TrackingThread:
                     frame = self.tracker.draw_landmarks(frame)
                     
                     # Status text
-                    status = "PINCHING" if is_pinching else "RELEASED"
+                    status = "GRABBING" if is_pinching else "RELEASED"
                     color = (0, 255, 0) if is_pinching else (100, 100, 255)
-                    cv2.putText(frame, f"{hand['handedness']} - {status}", 
-                               (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-                    cv2.putText(frame, f"Strength: {raw_strength:.2f}", 
-                               (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                    cv2.putText(frame, f"{hand['handedness']} Hand - {status}", 
+                               (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+                    
+                    # Show hand position
+                    cv2.putText(frame, f"Position: ({hand_center[0]:.2f}, {hand_center[1]:.2f})", 
+                               (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
             else:
                 # No hand detected
                 self.control_data['latest'] = None

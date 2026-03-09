@@ -41,14 +41,14 @@ class HandControlled3DApp(ShowBase):
     
     def setup_camera(self):
         """Setup camera position."""
-        self.camera.setPos(0, -10, 3)
+        self.camera.setPos(0, -18, 5)
         self.camera.lookAt(0, 0, 0)
         
         # Set background color (lighter so you can see better)
         self.setBackgroundColor(0.2, 0.2, 0.25, 1)
         
-        # Set field of view
-        self.camLens.setFov(60)
+        # Set wider field of view to see more
+        self.camLens.setFov(75)
     
     def setup_lighting(self):
         """Setup scene lighting."""
@@ -149,15 +149,15 @@ class HandControlled3DApp(ShowBase):
         """Load and setup one 3D model for simple testing."""
         self.objects = []
         
-        # Single cube in the center
+        # Single cube in the center - flatter (half height)
         cube = self.create_cube()
         cube.reparentTo(self.render)
         cube.setPos(0, 0, 0)
-        cube.setScale(1.0, 1.0, 1.0)
+        cube.setScale(0.8, 0.8, 0.4)
         cube.setColor(0.3, 1.0, 0.3, 1.0)
         cube.setTwoSided(True)
         
-        self.objects.append({'model': cube, 'name': 'Cube', 'base_scale': 1.0})
+        self.objects.append({'model': cube, 'name': 'Cube', 'base_scale': 0.8})
         
         # Set as the active model
         self.selected_index = 0
@@ -239,15 +239,15 @@ class HandControlled3DApp(ShowBase):
             # ACTIVE: Update model position (pinch & move only)
             self.auto_rotate = False
             
-            # Map hand position to 3D space
-            x = (position[0] - 0.5) * 8   # -4 to 4
-            z = (0.5 - position[1]) * 6   # -3 to 3
+            # Map hand position to 3D space (smaller range to keep cube visible)
+            x = (position[0] - 0.5) * 6   # -3 to 3
+            z = (0.5 - position[1]) * 4   # -2 to 2
             y = position[2] * -2          # Depth
             
             self.model.setPos(x, y, z)
             
-            # Keep scale at base size
-            self.model.setScale(1.0, 1.0, 1.0)
+            # Keep scale at base size (half height)
+            self.model.setScale(0.8, 0.8, 0.4)
             
             # Update color (very bright green when grabbed)
             self.model.setColor(0.2, 1.0, 0.2, 1.0)
@@ -256,7 +256,7 @@ class HandControlled3DApp(ShowBase):
             # Update status
             self.status_text.setText("GRABBED - Move your hand to control cube")
         else:
-            # INACTIVE: Hold last transform
+            # INACTIVE: Hold last position
             # Normal green color
             self.model.setColorScale(1, 1, 1, 1)
             self.model.setColor(0.3, 0.8, 0.3, 1.0)

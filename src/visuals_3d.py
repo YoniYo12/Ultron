@@ -40,15 +40,15 @@ class HandControlled3DApp(ShowBase):
         self.setup_ui()
     
     def setup_camera(self):
-        """Setup camera position."""
-        self.camera.setPos(0, -18, 5)
+        """Setup camera position - balanced view."""
+        self.camera.setPos(0, -10, 2)
         self.camera.lookAt(0, 0, 0)
         
         # Set background color (lighter so you can see better)
         self.setBackgroundColor(0.2, 0.2, 0.25, 1)
         
         # Set wider field of view to see more
-        self.camLens.setFov(75)
+        self.camLens.setFov(65)
     
     def setup_lighting(self):
         """Setup scene lighting."""
@@ -149,23 +149,29 @@ class HandControlled3DApp(ShowBase):
         """Load and setup one 3D model for simple testing."""
         self.objects = []
         
-        # Single cube in the center - flatter (half height)
+        # Single cube in the center - moderate size
         cube = self.create_cube()
         cube.reparentTo(self.render)
         cube.setPos(0, 0, 0)
-        cube.setScale(0.8, 0.8, 0.4)
+        cube.setScale(0.6, 0.6, 0.3)
         cube.setColor(0.3, 1.0, 0.3, 1.0)
         cube.setTwoSided(True)
         
-        self.objects.append({'model': cube, 'name': 'Cube', 'base_scale': 0.8})
+        self.objects.append({'model': cube, 'name': 'Cube', 'base_scale': 0.6})
         
         # Set as the active model
         self.selected_index = 0
         self.model = self.objects[self.selected_index]['model']
         
-        # State
-        self.rotation_speed = 40
-        self.auto_rotate = True
+        # State tracking
+        self.last_mode = 1
+        
+        # Control mode: 1 = Move (pinch), 2 = Rotate (fist)
+        self.control_mode = 1
+        
+        # Keyboard controls to switch modes
+        self.accept('1', self.set_move_mode)
+        self.accept('2', self.set_rotate_mode)
         
         # Add a visible test sphere at 0,0,0 to verify rendering
         from panda3d.core import TextNode
@@ -177,14 +183,11 @@ class HandControlled3DApp(ShowBase):
         text3d_node.setBillboardPointEye()
         
         print("="*50)
-        print("3D Cube loaded!")
+        print("3D CUBE LOADED")
         print(f"Cube position: {self.model.getPos()}")
         print(f"Cube scale: {self.model.getScale()}")
         print(f"Camera position: {self.camera.getPos()}")
-        print("You should see:")
-        print("  - A GREEN CUBE rotating in the center")
-        print("  - Text saying 'CUBE HERE' above it")
-        print("  - A grid on the ground")
+        print("You should see a GREEN FLAT BOX in the center")
         print("="*50)
     
     
@@ -193,7 +196,7 @@ class HandControlled3DApp(ShowBase):
         from direct.gui.OnscreenText import OnscreenText
         
         self.title_text = OnscreenText(
-            text="ULTRON - Pinch & Move",
+            text="ULTRON - [1] Move Mode",
             pos=(0, 0.9),
             scale=0.08,
             fg=(0.2, 0.8, 1.0, 1),
@@ -208,13 +211,37 @@ class HandControlled3DApp(ShowBase):
             align=0  # Left align
         )
         
+        self.mode_text = OnscreenText(
+            text="MODE: [1] MOVE (Pinch)",
+            pos=(0, -0.9),
+            scale=0.06,
+            fg=(0.2, 1.0, 0.2, 1),
+            align=1  # Center align
+        )
+        
         self.controls_text = OnscreenText(
-            text="CONTROLS:\n\n  Pinch Fingers = Grab\n  Move Hand = Move Object\n  Release = Drop\n\nPress ESC to quit",
+            text="CONTROLS:\n\n[1] MOVE MODE\n  Pinch (thumb+index)\n  Move to reposition\n\n[2] ROTATE MODE\n  Close TIGHT FIST\n  Tilt/Turn fist\n  Cube follows orientation\n\nESC = quit",
             pos=(-1.3, 0.8),
-            scale=0.055,
+            scale=0.045,
             fg=(0.8, 0.8, 0.8, 1),
             align=0  # Left align
         )
+    
+    def set_move_mode(self):
+        """Switch to move mode (pinch)."""
+        self.control_mode = 1
+        self.mode_text.setText("MODE: [1] MOVE (Pinch)")
+        self.mode_text.setFg((0.2, 1.0, 0.2, 1))
+        self.title_text.setText("ULTRON - [1] Move Mode")
+        print("Switched to MOVE MODE (Pinch)")
+    
+    def set_rotate_mode(self):
+        """Switch to rotate mode (fist)."""
+        self.control_mode = 2
+        self.mode_text.setText("MODE: [2] ROTATE (Fist)")
+        self.mode_text.setFg((1.0, 1.0, 0.2, 1))
+        self.title_text.setText("ULTRON - [2] Rotate Mode")
+        print("Switched to ROTATE MODE (Fist)")
     
     def update_task(self, task):
         """
@@ -225,19 +252,56 @@ class HandControlled3DApp(ShowBase):
         control = self.control_data.get('latest', None)
         
         if control is None:
-            self.status_text.setText("Waiting for hand...")
-            # Rotate object when waiting
-            current_h = self.model.getH()
-            self.model.setH(current_h + self.rotation_speed * globalClock.getDt())
+            if self.control_mode == 1:
+                self.status_text.setText("Waiting for hand... (Pinch to move)")
+            else:
+                self.status_text.setText("Waiting for hand... (Fist to rotate)")
+            
+            # Keep object centered and stationary when no hand detected
+            self.model.setPos(0, 0, 0)
+            self.model.setHpr(0, 0, 0)
+            self.model.setScale(0.6, 0.6, 0.3)
+            
             return Task.cont
         
-        # Simple one-hand control: pinch to grab and move
+        # Get control data
         is_active = control.get('is_active', False)
+        is_rotating = control.get('is_rotating', False)
         position = control.get('position', [0.5, 0.5, 0.0])
+        orientation = control.get('orientation', {'pitch': 0, 'roll': 0, 'yaw': 0})
         
-        if is_active:
-            # ACTIVE: Update model position (pinch & move only)
-            self.auto_rotate = False
+        # Apply control based on current mode
+        if self.control_mode == 2 and is_rotating:
+            # ROTATION MODE: Claw gesture follows hand orientation in 3D
+            
+            # Get hand orientation (pitch, roll, yaw)
+            pitch = orientation['pitch']
+            roll = orientation['roll']
+            yaw = orientation['yaw']
+            
+            # Apply full 3D rotation to cube - adjusted for more natural feel
+            # H = Heading (yaw) - left/right rotation
+            # P = Pitch - up/down tilt (inverted for natural feel)
+            # R = Roll - wrist twist
+            
+            # Scale rotations for better control
+            self.model.setHpr(yaw, pitch, -roll)
+            
+            # Keep position centered
+            self.model.setPos(0, 0, 0)
+            
+            # Keep scale constant
+            self.model.setScale(0.6, 0.6, 0.3)
+            
+            # Update color (yellow when rotating)
+            self.model.setColor(1.0, 1.0, 0.2, 1.0)
+            self.model.setColorScale(1.3, 1.3, 1.0, 1.0)
+            
+            # Update status
+            self.status_text.setText(f"ROTATING - Tilt hand (Y:{yaw:.0f}° P:{pitch:.0f}° R:{roll:.0f}°)")
+            
+        elif self.control_mode == 1 and is_active:
+            # MOVE MODE: Update position based on hand movement
             
             # Map hand position to 3D space (smaller range to keep cube visible)
             x = (position[0] - 0.5) * 6   # -3 to 3
@@ -246,27 +310,31 @@ class HandControlled3DApp(ShowBase):
             
             self.model.setPos(x, y, z)
             
-            # Keep scale at base size (half height)
-            self.model.setScale(0.8, 0.8, 0.4)
+            # Keep rotation at zero and scale constant
+            self.model.setHpr(0, 0, 0)
+            self.model.setScale(0.6, 0.6, 0.3)
             
             # Update color (very bright green when grabbed)
             self.model.setColor(0.2, 1.0, 0.2, 1.0)
             self.model.setColorScale(1.5, 1.5, 1.5, 1.0)
             
             # Update status
-            self.status_text.setText("GRABBED - Move your hand to control cube")
+            self.status_text.setText("MOVING - Pinch detected")
         else:
-            # INACTIVE: Hold last position
+            # INACTIVE: Hold last position (or return to center)
             # Normal green color
             self.model.setColorScale(1, 1, 1, 1)
             self.model.setColor(0.3, 0.8, 0.3, 1.0)
             
-            self.status_text.setText("RELEASED - Cube is held in place")
+            # Reset to center when released
+            self.model.setPos(0, 0, 0)
+            self.model.setHpr(0, 0, 0)
+            self.model.setScale(0.6, 0.6, 0.3)
             
-            # Slowly auto-rotate when not controlled
-            if self.auto_rotate:
-                current_h = self.model.getH()
-                self.model.setH(current_h + self.rotation_speed * globalClock.getDt())
+            if self.control_mode == 1:
+                self.status_text.setText("RELEASED - Use PINCH to grab")
+            else:
+                self.status_text.setText("RELEASED - Use FIST to rotate")
         
         return Task.cont
 

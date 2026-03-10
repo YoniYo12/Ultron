@@ -69,34 +69,77 @@ class TrackingThread:
             hands_info = self.tracker.get_hand_info()
             
             if hands_info:
-                # Use first detected hand for control
-                hand = hands_info[0]
-                landmarks = hand['landmarks']
+                try:
+                    # Use first detected hand for control
+                    hand = hands_info[0]
+                    landmarks = hand['landmarks']
+                    
+                    # Compute gesture data
+                    is_pinching = self.gesture.is_pinching(landmarks)
+                    is_grabbing = self.gesture.is_grabbing(landmarks)
+                    raw_strength = self.gesture.get_pinch_strength(landmarks)
+                    hand_center = self.gesture.get_hand_center(landmarks)
+                    hand_3d_orientation = self.gesture.get_hand_3d_orientation(landmarks)
+                    
+                    # Prioritize gestures: grabbing (fist) takes priority over pinching
+                    # This prevents conflicts
+                    if is_grabbing:
+                        # Rotation mode - disable pinching
+                        is_pinching = False
+                        raw_strength = 0.0
+                    
+                    # Update mapper (smoothing + gating)
+                    control = self.mapper.update(is_pinching, raw_strength, hand_center)
+                    
+                    # Add rotation data (claw/grab gesture triggers rotation)
+                    control['is_rotating'] = is_grabbing
+                    control['orientation'] = hand_3d_orientation
+                    
+                    # Store in shared dict for 3D app
+                    self.control_data['latest'] = control
                 
-                # Compute gesture data
-                is_pinching = self.gesture.is_pinching(landmarks)
-                raw_strength = self.gesture.get_pinch_strength(landmarks)
-                hand_center = self.gesture.get_hand_center(landmarks)
-                
-                # Update mapper (smoothing + gating)
-                control = self.mapper.update(is_pinching, raw_strength, hand_center)
-                
-                # Store in shared dict for 3D app
-                self.control_data['latest'] = control
+                except Exception as e:
+                    print(f"Error processing hand data: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    continue
                 
                 # Optional: Draw on camera feed
                 if self.show_camera:
                     frame = self.tracker.draw_landmarks(frame)
                     
+                    # Calculate average finger distance for debugging
+                    wrist = landmarks[0]
+                    distances = [
+                        self.gesture.calculate_distance(wrist, landmarks[8]),
+                        self.gesture.calculate_distance(wrist, landmarks[12]),
+                        self.gesture.calculate_distance(wrist, landmarks[16]),
+                        self.gesture.calculate_distance(wrist, landmarks[20])
+                    ]
+                    avg_dist = sum(distances) / len(distances)
+                    
                     # Status text
-                    status = "GRABBING" if is_pinching else "RELEASED"
-                    color = (0, 255, 0) if is_pinching else (100, 100, 255)
-                    cv2.putText(frame, f"{hand['handedness']} Hand - {status}", 
+                    if is_grabbing:
+                        status = "FIST DETECTED - ROTATING"
+                        color = (0, 255, 255)
+                    elif is_pinching:
+                        status = "PINCH DETECTED - MOVING"
+                        color = (0, 255, 0)
+                    else:
+                        status = "OPEN HAND"
+                        color = (100, 100, 255)
+                    
+                    cv2.putText(frame, f"{status}", 
                                (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
                     
-                    # Show hand position
-                    cv2.putText(frame, f"Position: ({hand_center[0]:.2f}, {hand_center[1]:.2f})", 
-                               (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                    # Show finger distance for debugging
+                    cv2.putText(frame, f"Finger Distance: {avg_dist:.3f} (Fist < 0.18)", 
+                               (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                    
+                    # Show orientation when grabbing
+                    if is_grabbing:
+                        cv2.putText(frame, f"P:{hand_3d_orientation['pitch']:.0f}° R:{hand_3d_orientation['roll']:.0f}° Y:{hand_3d_orientation['yaw']:.0f}°", 
+                                   (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
             else:
                 # No hand detected
                 self.control_data['latest'] = None

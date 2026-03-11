@@ -149,15 +149,15 @@ class HandControlled3DApp(ShowBase):
         """Load and setup one 3D model for simple testing."""
         self.objects = []
         
-        # Single cube in the center
+        # Single cube in the center - half size
         cube = self.create_cube()
         cube.reparentTo(self.render)
         cube.setPos(0, 0, 0)
-        cube.setScale(1.5, 1.5, 0.75)
+        cube.setScale(0.75, 0.75, 0.375)
         cube.setColor(0.3, 1.0, 0.3, 1.0)
         cube.setTwoSided(True)
         
-        self.objects.append({'model': cube, 'name': 'Cube', 'base_scale': 1.5})
+        self.objects.append({'model': cube, 'name': 'Cube', 'base_scale': 0.75})
         
         # Set as the active model
         self.selected_index = 0
@@ -260,7 +260,7 @@ class HandControlled3DApp(ShowBase):
             # Keep object centered and stationary when no hand detected
             self.model.setPos(0, 0, 0)
             self.model.setHpr(0, 0, 0)
-            self.model.setScale(1.5, 1.5, 0.75)
+            self.model.setScale(0.75, 0.75, 0.375)
             
             return Task.cont
         
@@ -291,7 +291,7 @@ class HandControlled3DApp(ShowBase):
             self.model.setPos(0, 0, 0)
             
             # Keep scale constant
-            self.model.setScale(1.5, 1.5, 0.75)
+            self.model.setScale(0.75, 0.75, 0.375)
             
             # Update color (yellow when rotating)
             self.model.setColor(1.0, 1.0, 0.2, 1.0)
@@ -312,7 +312,7 @@ class HandControlled3DApp(ShowBase):
             
             # Keep rotation at zero and scale constant
             self.model.setHpr(0, 0, 0)
-            self.model.setScale(1.5, 1.5, 0.75)
+            self.model.setScale(0.75, 0.75, 0.375)
             
             # Update color (very bright green when grabbed)
             self.model.setColor(0.2, 1.0, 0.2, 1.0)
@@ -329,7 +329,7 @@ class HandControlled3DApp(ShowBase):
             # Reset to center when released
             self.model.setPos(0, 0, 0)
             self.model.setHpr(0, 0, 0)
-            self.model.setScale(1.5, 1.5, 0.75)
+            self.model.setScale(0.75, 0.75, 0.375)
             
             if self.control_mode == 1:
                 self.status_text.setText("RELEASED - Use PINCH to grab")

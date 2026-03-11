@@ -40,15 +40,15 @@ class HandControlled3DApp(ShowBase):
         self.setup_ui()
     
     def setup_camera(self):
-        """Setup camera position - balanced view."""
-        self.camera.setPos(0, -10, 2)
+        """Setup camera position - far back for full view."""
+        self.camera.setPos(0, -25, 8)
         self.camera.lookAt(0, 0, 0)
         
         # Set background color (lighter so you can see better)
         self.setBackgroundColor(0.2, 0.2, 0.25, 1)
         
         # Set wider field of view to see more
-        self.camLens.setFov(65)
+        self.camLens.setFov(60)
     
     def setup_lighting(self):
         """Setup scene lighting."""
@@ -149,15 +149,15 @@ class HandControlled3DApp(ShowBase):
         """Load and setup one 3D model for simple testing."""
         self.objects = []
         
-        # Single cube in the center - moderate size
+        # Single cube in the center
         cube = self.create_cube()
         cube.reparentTo(self.render)
         cube.setPos(0, 0, 0)
-        cube.setScale(0.6, 0.6, 0.3)
+        cube.setScale(1.5, 1.5, 0.75)
         cube.setColor(0.3, 1.0, 0.3, 1.0)
         cube.setTwoSided(True)
         
-        self.objects.append({'model': cube, 'name': 'Cube', 'base_scale': 0.6})
+        self.objects.append({'model': cube, 'name': 'Cube', 'base_scale': 1.5})
         
         # Set as the active model
         self.selected_index = 0
@@ -260,7 +260,7 @@ class HandControlled3DApp(ShowBase):
             # Keep object centered and stationary when no hand detected
             self.model.setPos(0, 0, 0)
             self.model.setHpr(0, 0, 0)
-            self.model.setScale(0.6, 0.6, 0.3)
+            self.model.setScale(1.5, 1.5, 0.75)
             
             return Task.cont
         
@@ -291,7 +291,7 @@ class HandControlled3DApp(ShowBase):
             self.model.setPos(0, 0, 0)
             
             # Keep scale constant
-            self.model.setScale(0.6, 0.6, 0.3)
+            self.model.setScale(1.5, 1.5, 0.75)
             
             # Update color (yellow when rotating)
             self.model.setColor(1.0, 1.0, 0.2, 1.0)
@@ -303,16 +303,16 @@ class HandControlled3DApp(ShowBase):
         elif self.control_mode == 1 and is_active:
             # MOVE MODE: Update position based on hand movement
             
-            # Map hand position to 3D space (smaller range to keep cube visible)
-            x = (position[0] - 0.5) * 6   # -3 to 3
-            z = (0.5 - position[1]) * 4   # -2 to 2
-            y = position[2] * -2          # Depth
+            # Map hand position to 3D space
+            x = (position[0] - 0.5) * 12  # -6 to 6
+            z = (0.5 - position[1]) * 8   # -4 to 4
+            y = position[2] * -3          # Depth
             
             self.model.setPos(x, y, z)
             
             # Keep rotation at zero and scale constant
             self.model.setHpr(0, 0, 0)
-            self.model.setScale(0.6, 0.6, 0.3)
+            self.model.setScale(1.5, 1.5, 0.75)
             
             # Update color (very bright green when grabbed)
             self.model.setColor(0.2, 1.0, 0.2, 1.0)
@@ -329,7 +329,7 @@ class HandControlled3DApp(ShowBase):
             # Reset to center when released
             self.model.setPos(0, 0, 0)
             self.model.setHpr(0, 0, 0)
-            self.model.setScale(0.6, 0.6, 0.3)
+            self.model.setScale(1.5, 1.5, 0.75)
             
             if self.control_mode == 1:
                 self.status_text.setText("RELEASED - Use PINCH to grab")

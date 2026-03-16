@@ -40,14 +40,11 @@ class HandControlled3DApp(ShowBase):
         self.setup_ui()
     
     def setup_camera(self):
-        """Setup camera position - far back for full view."""
-        self.camera.setPos(0, -25, 8)
+        """Setup camera position."""
+        self.camera.setPos(0, -10, 3)
         self.camera.lookAt(0, 0, 0)
         
-        # Set background color (lighter so you can see better)
-        self.setBackgroundColor(0.2, 0.2, 0.25, 1)
-        
-        # Set wider field of view to see more
+        self.setBackgroundColor(0.15, 0.15, 0.2, 1)
         self.camLens.setFov(60)
     
     def setup_lighting(self):
@@ -87,46 +84,65 @@ class HandControlled3DApp(ShowBase):
         
         grid_node = self.render.attachNewNode(lines.create())
     
-    def create_cube(self):
-        """Create a procedural cube."""
+    def create_3d_cross(self):
+        """Create a 3D cross with colored arms so rotation is obvious."""
         from panda3d.core import CardMaker
-        cm = CardMaker('card')
-        cm.setFrame(-1, 1, -1, 1)
         
-        # Create 6 faces for a cube
-        node = self.render.attachNewNode('cube')
+        node = self.render.attachNewNode('cross')
         
-        # Front face
-        front = node.attachNewNode(cm.generate())
-        front.setPos(0, 1, 0)
+        cm = CardMaker('bar')
+        bar_length = 1.0
+        bar_thickness = 0.25
         
-        # Back face
-        back = node.attachNewNode(cm.generate())
-        back.setPos(0, -1, 0)
-        back.setH(180)
+        # X axis bar (RED) - horizontal
+        cm.setFrame(-bar_length, bar_length, -bar_thickness, bar_thickness)
+        x_front = node.attachNewNode(cm.generate())
+        x_front.setColor(1, 0.2, 0.2, 1)
+        x_back = node.attachNewNode(cm.generate())
+        x_back.setH(180)
+        x_back.setColor(1, 0.2, 0.2, 1)
+        x_top = node.attachNewNode(cm.generate())
+        x_top.setP(90)
+        x_top.setColor(0.8, 0.15, 0.15, 1)
+        x_bottom = node.attachNewNode(cm.generate())
+        x_bottom.setP(-90)
+        x_bottom.setColor(0.8, 0.15, 0.15, 1)
         
-        # Right face
-        right = node.attachNewNode(cm.generate())
-        right.setPos(1, 0, 0)
-        right.setH(90)
-        right.setP(0)
-        right.setR(90)
+        # Y axis bar (BLUE) - depth
+        cm.setFrame(-bar_thickness, bar_thickness, -bar_thickness, bar_thickness)
+        for angle in [0, 90, 180, 270]:
+            face = node.attachNewNode(cm.generate())
+            face.setPos(0, 0, 0)
+            face.setH(angle)
+            face.setScale(1, bar_length, 1)
+            face.setColor(0.2, 0.4, 1.0, 1)
         
-        # Left face
-        left = node.attachNewNode(cm.generate())
-        left.setPos(-1, 0, 0)
-        left.setH(-90)
-        left.setR(90)
+        # Z axis bar (GREEN) - vertical
+        cm.setFrame(-bar_thickness, bar_thickness, -bar_length, bar_length)
+        z_front = node.attachNewNode(cm.generate())
+        z_front.setColor(0.2, 1, 0.3, 1)
+        z_back = node.attachNewNode(cm.generate())
+        z_back.setH(180)
+        z_back.setColor(0.2, 1, 0.3, 1)
+        z_left = node.attachNewNode(cm.generate())
+        z_left.setH(90)
+        z_left.setColor(0.15, 0.8, 0.2, 1)
+        z_right = node.attachNewNode(cm.generate())
+        z_right.setH(-90)
+        z_right.setColor(0.15, 0.8, 0.2, 1)
         
-        # Top face
-        top = node.attachNewNode(cm.generate())
-        top.setPos(0, 0, 1)
-        top.setP(90)
-        
-        # Bottom face
-        bottom = node.attachNewNode(cm.generate())
-        bottom.setPos(0, 0, -1)
-        bottom.setP(-90)
+        # Small center cube to anchor visually
+        cm.setFrame(-bar_thickness*1.5, bar_thickness*1.5, -bar_thickness*1.5, bar_thickness*1.5)
+        for angle in [0, 90, 180, 270]:
+            c = node.attachNewNode(cm.generate())
+            c.setH(angle)
+            c.setColor(1, 1, 1, 1)
+        c_top = node.attachNewNode(cm.generate())
+        c_top.setP(90)
+        c_top.setColor(1, 1, 1, 1)
+        c_bot = node.attachNewNode(cm.generate())
+        c_bot.setP(-90)
+        c_bot.setColor(1, 1, 1, 1)
         
         return node
     
@@ -146,48 +162,47 @@ class HandControlled3DApp(ShowBase):
         return node
     
     def load_model(self):
-        """Load and setup one 3D model for simple testing."""
+        """Load 3D cross model - rotation is obvious from any angle."""
         self.objects = []
         
-        # Single cube in the center - half size
-        cube = self.create_cube()
-        cube.reparentTo(self.render)
-        cube.setPos(0, 0, 0)
-        cube.setScale(0.75, 0.75, 0.375)
-        cube.setColor(0.3, 1.0, 0.3, 1.0)
-        cube.setTwoSided(True)
+        cross = self.create_3d_cross()
+        cross.reparentTo(self.render)
+        cross.setPos(0, 0, 0)
+        cross.setScale(2.0)
+        cross.setTwoSided(True)
         
-        self.objects.append({'model': cube, 'name': 'Cube', 'base_scale': 0.75})
+        self.objects.append({'model': cross, 'name': 'Cross', 'base_scale': 2.0})
         
         # Set as the active model
         self.selected_index = 0
         self.model = self.objects[self.selected_index]['model']
         
-        # State tracking
-        self.last_mode = 1
+        # State
+        self.rotation_speed = 40
+        self.auto_rotate = True
         
-        # Control mode: 1 = Move (pinch), 2 = Rotate (fist)
-        self.control_mode = 1
+        # Grab-rotate tracking (SpaceX style)
+        self.grab_active = False
+        self.grab_start_pos = [0.5, 0.5]
+        self.grab_start_h = 0.0
+        self.grab_start_p = 0.0
         
-        # Keyboard controls to switch modes
-        self.accept('1', self.set_move_mode)
-        self.accept('2', self.set_rotate_mode)
-        
-        # Add a visible test sphere at 0,0,0 to verify rendering
         from panda3d.core import TextNode
-        text3d = TextNode('test_text')
-        text3d.setText('CUBE HERE')
+        text3d = TextNode('label')
+        text3d.setText('R=Red  G=Green  B=Blue')
         text3d_node = self.render.attachNewNode(text3d)
-        text3d_node.setScale(0.5)
-        text3d_node.setPos(0, 0, 2)
+        text3d_node.setScale(0.3)
+        text3d_node.setPos(-1.5, 0, 2.5)
         text3d_node.setBillboardPointEye()
         
         print("="*50)
-        print("3D CUBE LOADED")
-        print(f"Cube position: {self.model.getPos()}")
-        print(f"Cube scale: {self.model.getScale()}")
-        print(f"Camera position: {self.camera.getPos()}")
-        print("You should see a GREEN FLAT BOX in the center")
+        print("3D Cross loaded!")
+        print("  Red bar   = X axis (horizontal)")
+        print("  Green bar = Z axis (vertical)")
+        print("  Blue bar  = Y axis (depth)")
+        print("  White center cube")
+        print(f"Position: {self.model.getPos()}")
+        print(f"Camera: {self.camera.getPos()}")
         print("="*50)
     
     
@@ -196,7 +211,7 @@ class HandControlled3DApp(ShowBase):
         from direct.gui.OnscreenText import OnscreenText
         
         self.title_text = OnscreenText(
-            text="ULTRON - [1] Move Mode",
+            text="ULTRON - Hand Control",
             pos=(0, 0.9),
             scale=0.08,
             fg=(0.2, 0.8, 1.0, 1),
@@ -208,133 +223,91 @@ class HandControlled3DApp(ShowBase):
             pos=(-1.3, -0.9),
             scale=0.05,
             fg=(1, 1, 0, 1),
-            align=0  # Left align
-        )
-        
-        self.mode_text = OnscreenText(
-            text="MODE: [1] MOVE (Pinch)",
-            pos=(0, -0.9),
-            scale=0.06,
-            fg=(0.2, 1.0, 0.2, 1),
-            align=1  # Center align
+            align=0
         )
         
         self.controls_text = OnscreenText(
-            text="CONTROLS:\n\n[1] MOVE MODE\n  Pinch (thumb+index)\n  Move to reposition\n\n[2] ROTATE MODE\n  Close TIGHT FIST\n  Tilt/Turn fist\n  Cube follows orientation\n\nESC = quit",
+            text="CONTROLS:\n\n  Pinch = Grab & Move\n  Close Hand = Grab & Rotate\n  Open Hand = Release\n\nPress ESC to quit",
             pos=(-1.3, 0.8),
-            scale=0.045,
+            scale=0.055,
             fg=(0.8, 0.8, 0.8, 1),
-            align=0  # Left align
+            align=0
         )
-    
-    def set_move_mode(self):
-        """Switch to move mode (pinch)."""
-        self.control_mode = 1
-        self.mode_text.setText("MODE: [1] MOVE (Pinch)")
-        self.mode_text.setFg((0.2, 1.0, 0.2, 1))
-        self.title_text.setText("ULTRON - [1] Move Mode")
-        print("Switched to MOVE MODE (Pinch)")
-    
-    def set_rotate_mode(self):
-        """Switch to rotate mode (fist)."""
-        self.control_mode = 2
-        self.mode_text.setText("MODE: [2] ROTATE (Fist)")
-        self.mode_text.setFg((1.0, 1.0, 0.2, 1))
-        self.title_text.setText("ULTRON - [2] Rotate Mode")
-        print("Switched to ROTATE MODE (Fist)")
     
     def update_task(self, task):
         """
         Per-frame update task.
-        Reads control data and updates model.
+        Pinch = grab and move (translate).
+        Grab (closed hand) = grab and rotate (SpaceX style: hand movement = rotation).
         """
-        # Get latest control data from tracking thread
         control = self.control_data.get('latest', None)
         
         if control is None:
-            if self.control_mode == 1:
-                self.status_text.setText("Waiting for hand... (Pinch to move)")
-            else:
-                self.status_text.setText("Waiting for hand... (Fist to rotate)")
-            
-            # Keep object centered and stationary when no hand detected
-            self.model.setPos(0, 0, 0)
-            self.model.setHpr(0, 0, 0)
-            self.model.setScale(0.75, 0.75, 0.375)
-            
+            self.status_text.setText("Waiting for hand...")
+            self.grab_active = False
+            if self.auto_rotate:
+                current_h = self.model.getH()
+                self.model.setH(current_h + self.rotation_speed * globalClock.getDt())
             return Task.cont
         
-        # Get control data
         is_active = control.get('is_active', False)
         is_rotating = control.get('is_rotating', False)
+        raw_pos = control.get('raw_position', [0.5, 0.5, 0.0])
         position = control.get('position', [0.5, 0.5, 0.0])
-        orientation = control.get('orientation', {'pitch': 0, 'roll': 0, 'yaw': 0})
         
-        # Apply control based on current mode
-        if self.control_mode == 2 and is_rotating:
-            # ROTATION MODE: Claw gesture follows hand orientation in 3D
+        if is_rotating:
+            # GRAB: Rotate object by moving hand (SpaceX/Iron Man style)
+            self.auto_rotate = False
             
-            # Get hand orientation (pitch, roll, yaw)
-            pitch = orientation['pitch']
-            roll = orientation['roll']
-            yaw = orientation['yaw']
+            if not self.grab_active:
+                # Grab just started - snapshot starting state
+                self.grab_start_pos = [raw_pos[0], raw_pos[1]]
+                self.grab_start_h = self.model.getH()
+                self.grab_start_p = self.model.getP()
+                self.grab_active = True
             
-            # Apply full 3D rotation to cube - adjusted for more natural feel
-            # H = Heading (yaw) - left/right rotation
-            # P = Pitch - up/down tilt (inverted for natural feel)
-            # R = Roll - wrist twist
+            # Hand movement delta from grab start → object rotation
+            dx = raw_pos[0] - self.grab_start_pos[0]  # horizontal movement
+            dy = raw_pos[1] - self.grab_start_pos[1]  # vertical movement
             
-            # Scale rotations for better control
-            self.model.setHpr(yaw, pitch, -roll)
+            # Map hand movement to rotation (300 deg per full screen width)
+            rotation_sensitivity = 300.0
+            new_h = self.grab_start_h - dx * rotation_sensitivity
+            new_p = self.grab_start_p + dy * rotation_sensitivity
             
-            # Keep position centered
-            self.model.setPos(0, 0, 0)
+            self.model.setH(new_h)
+            self.model.setP(new_p)
             
-            # Keep scale constant
-            self.model.setScale(0.75, 0.75, 0.375)
+            # Orange glow when rotating
+            self.model.setColor(1.0, 0.6, 0.1, 1.0)
+            self.model.setColorScale(1.3, 1.3, 1.3, 1.0)
+            self.status_text.setText("ROTATING - Move hand to spin object")
             
-            # Update color (yellow when rotating)
-            self.model.setColor(1.0, 1.0, 0.2, 1.0)
-            self.model.setColorScale(1.3, 1.3, 1.0, 1.0)
+        elif is_active:
+            # PINCH: Move the object
+            self.auto_rotate = False
+            self.grab_active = False
             
-            # Update status
-            self.status_text.setText(f"ROTATING - Tilt hand (Y:{yaw:.0f}° P:{pitch:.0f}° R:{roll:.0f}°)")
-            
-        elif self.control_mode == 1 and is_active:
-            # MOVE MODE: Update position based on hand movement
-            
-            # Map hand position to 3D space
-            x = (position[0] - 0.5) * 12  # -6 to 6
-            z = (0.5 - position[1]) * 8   # -4 to 4
-            y = position[2] * -3          # Depth
+            x = (position[0] - 0.5) * 6
+            z = (0.5 - position[1]) * 4
+            y = position[2] * -2
             
             self.model.setPos(x, y, z)
-            
-            # Keep rotation at zero and scale constant
-            self.model.setHpr(0, 0, 0)
-            self.model.setScale(0.75, 0.75, 0.375)
-            
-            # Update color (very bright green when grabbed)
+            self.model.setScale(2.0)
             self.model.setColor(0.2, 1.0, 0.2, 1.0)
             self.model.setColorScale(1.5, 1.5, 1.5, 1.0)
+            self.status_text.setText("PINCH - Move hand to translate")
             
-            # Update status
-            self.status_text.setText("MOVING - Pinch detected")
         else:
-            # INACTIVE: Hold last position (or return to center)
-            # Normal green color
+            # RELEASED: Hold position and rotation
+            self.grab_active = False
             self.model.setColorScale(1, 1, 1, 1)
             self.model.setColor(0.3, 0.8, 0.3, 1.0)
+            self.status_text.setText("OPEN - Object held in place")
             
-            # Reset to center when released
-            self.model.setPos(0, 0, 0)
-            self.model.setHpr(0, 0, 0)
-            self.model.setScale(0.75, 0.75, 0.375)
-            
-            if self.control_mode == 1:
-                self.status_text.setText("RELEASED - Use PINCH to grab")
-            else:
-                self.status_text.setText("RELEASED - Use FIST to rotate")
+            if self.auto_rotate:
+                current_h = self.model.getH()
+                self.model.setH(current_h + self.rotation_speed * globalClock.getDt())
         
         return Task.cont
 

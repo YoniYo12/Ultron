@@ -85,7 +85,7 @@ class GestureRecognizer:
     
     def is_grabbing(self, hand_landmarks):
         """
-        Detect if hand is making a grab gesture (all fingers closed into fist/claw).
+        Detect if hand is making a grab gesture (all fingers closed).
         
         Args:
             hand_landmarks: List of 21 hand landmarks
@@ -95,7 +95,6 @@ class GestureRecognizer:
         """
         wrist = hand_landmarks[self.WRIST]
         
-        # Check distance from wrist to fingertips
         distances = [
             self.calculate_distance(wrist, hand_landmarks[self.INDEX_TIP]),
             self.calculate_distance(wrist, hand_landmarks[self.MIDDLE_TIP]),
@@ -104,8 +103,7 @@ class GestureRecognizer:
         ]
         
         avg_distance = sum(distances) / len(distances)
-        # Increased threshold to make fist detection easier
-        return avg_distance < 0.18
+        return avg_distance < 0.15
     
     def is_open_palm(self, hand_landmarks):
         """
@@ -165,7 +163,7 @@ class GestureRecognizer:
     
     def get_hand_rotation(self, hand_landmarks):
         """
-        Calculate hand rotation/orientation (simple yaw).
+        Calculate hand rotation/orientation.
         
         Args:
             hand_landmarks: List of 21 hand landmarks
@@ -182,58 +180,44 @@ class GestureRecognizer:
         angle = math.degrees(math.atan2(dy, dx))
         return angle
     
-    def get_hand_3d_orientation(self, hand_landmarks):
+    def is_grab(self, hand_landmarks):
         """
-        Calculate full 3D orientation of hand (pitch, roll, yaw).
-        
-        Args:
-            hand_landmarks: List of 21 hand landmarks
-            
-        Returns:
-            dict: {'pitch': float, 'roll': float, 'yaw': float} in degrees
+        Detect grab gesture: hand closed (fist or claw) but NOT pinching.
+        Like grabbing an object to rotate it (SpaceX/Iron Man style).
+        Mutually exclusive with pinch by design.
         """
-        try:
-            wrist = hand_landmarks[self.WRIST]
-            middle_mcp = hand_landmarks[9]  # Middle finger base
-            index_mcp = hand_landmarks[5]   # Index finger base
-            pinky_mcp = hand_landmarks[17]  # Pinky base
-            
-            # Forward vector (wrist to middle finger)
-            forward_x = middle_mcp.x - wrist.x
-            forward_y = middle_mcp.y - wrist.y
-            forward_z = middle_mcp.z - wrist.z
-            
-            # Side vector (pinky to index - across palm)
-            side_x = index_mcp.x - pinky_mcp.x
-            side_y = index_mcp.y - pinky_mcp.y
-            side_z = index_mcp.z - pinky_mcp.z
-            
-            # Calculate pitch (up/down tilt)
-            forward_mag = math.sqrt(forward_x**2 + forward_y**2)
-            if forward_mag > 0.001:
-                pitch = math.degrees(math.atan2(forward_z, forward_mag))
-            else:
-                pitch = 0
-            
-            # Calculate yaw (left/right rotation)
-            yaw = math.degrees(math.atan2(forward_y, forward_x))
-            
-            # Calculate roll (wrist twist) using side vector
-            side_mag = math.sqrt(side_x**2 + side_y**2)
-            if side_mag > 0.001:
-                roll = math.degrees(math.atan2(side_z, side_mag))
-            else:
-                roll = 0
-            
-            return {
-                'pitch': pitch,   # Tilting hand up/down
-                'roll': roll,     # Rotating wrist
-                'yaw': yaw        # Turning hand left/right
-            }
-        except Exception as e:
-            # Return default orientation if calculation fails
-            return {'pitch': 0, 'roll': 0, 'yaw': 0}
-    
+        if self.is_pinching(hand_landmarks):
+            return False
+
+        wrist = hand_landmarks[self.WRIST]
+
+        tip_distances = [
+            self.calculate_distance(wrist, hand_landmarks[self.INDEX_TIP]),
+            self.calculate_distance(wrist, hand_landmarks[self.MIDDLE_TIP]),
+            self.calculate_distance(wrist, hand_landmarks[self.RING_TIP]),
+            self.calculate_distance(wrist, hand_landmarks[self.PINKY_TIP])
+        ]
+        avg_dist = sum(tip_distances) / len(tip_distances)
+
+        self._last_grab_avg = avg_dist
+
+        # Anything below open palm = grab (fist, claw, loose grip all count)
+        return avg_dist < 0.23
+
+    def get_hand_roll(self, hand_landmarks):
+        """
+        Get the roll angle of the hand (wrist rotation) in degrees.
+        Measures the angle of the line from index knuckle to pinky knuckle.
+        0 = hand level, positive = clockwise tilt, negative = counter-clockwise.
+        """
+        index_mcp = hand_landmarks[5]
+        pinky_mcp = hand_landmarks[17]
+
+        dx = pinky_mcp.x - index_mcp.x
+        dy = pinky_mcp.y - index_mcp.y
+
+        return math.degrees(math.atan2(dy, dx))
+
     def get_two_hand_distance(self, hand1_landmarks, hand2_landmarks):
         """
         Calculate distance between two hands.

@@ -47,119 +47,106 @@ class TrackingThread:
     
     def _tracking_loop(self):
         """Main tracking loop (runs in separate thread)."""
-        cap = cv2.VideoCapture(0)
-        
-        if not cap.isOpened():
-            print("ERROR: Could not open camera!")
-            return
-        
-        print("Camera opened. Tracking hands...")
-        
-        while self.running and cap.isOpened():
-            success, frame = cap.read()
-            if not success:
-                continue
+        cap = None
+        try:
+            cap = cv2.VideoCapture(0)
             
-            # Flip for mirror effect
-            frame = cv2.flip(frame, 1)
-            h, w = frame.shape[:2]
+            if not cap.isOpened():
+                print("ERROR: Could not open camera!")
+                return
             
-            # Process hand tracking
-            self.tracker.process_frame(frame)
-            hands_info = self.tracker.get_hand_info()
+            print("Camera opened. Tracking hands...")
             
-            if hands_info:
+            while self.running and cap.isOpened():
                 try:
-                    # Use first detected hand for control
-                    hand = hands_info[0]
-                    landmarks = hand['landmarks']
+                    success, frame = cap.read()
+                    if not success:
+                        continue
                     
-                    # Compute gesture data
-                    is_pinching = self.gesture.is_pinching(landmarks)
-                    is_grabbing = self.gesture.is_grabbing(landmarks)
-                    raw_strength = self.gesture.get_pinch_strength(landmarks)
-                    hand_center = self.gesture.get_hand_center(landmarks)
-                    hand_3d_orientation = self.gesture.get_hand_3d_orientation(landmarks)
+                    # Flip for mirror effect
+                    frame = cv2.flip(frame, 1)
+                    h, w = frame.shape[:2]
                     
-                    # Prioritize gestures: grabbing (fist) takes priority over pinching
-                    # This prevents conflicts
-                    if is_grabbing:
-                        # Rotation mode - disable pinching
-                        is_pinching = False
-                        raw_strength = 0.0
+                    # Process hand tracking
+                    self.tracker.process_frame(frame)
+                    hands_info = self.tracker.get_hand_info()
                     
-                    # Update mapper (smoothing + gating)
-                    control = self.mapper.update(is_pinching, raw_strength, hand_center)
-                    
-                    # Add rotation data (claw/grab gesture triggers rotation)
-                    control['is_rotating'] = is_grabbing
-                    control['orientation'] = hand_3d_orientation
-                    
-                    # Store in shared dict for 3D app
-                    self.control_data['latest'] = control
-                
-                except Exception as e:
-                    print(f"Error processing hand data: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    continue
-                
-                # Optional: Draw on camera feed
-                if self.show_camera:
-                    frame = self.tracker.draw_landmarks(frame)
-                    
-                    # Calculate average finger distance for debugging
-                    wrist = landmarks[0]
-                    distances = [
-                        self.gesture.calculate_distance(wrist, landmarks[8]),
-                        self.gesture.calculate_distance(wrist, landmarks[12]),
-                        self.gesture.calculate_distance(wrist, landmarks[16]),
-                        self.gesture.calculate_distance(wrist, landmarks[20])
-                    ]
-                    avg_dist = sum(distances) / len(distances)
-                    
-                    # Status text
-                    if is_grabbing:
-                        status = "FIST DETECTED - ROTATING"
-                        color = (0, 255, 255)
-                    elif is_pinching:
-                        status = "PINCH DETECTED - MOVING"
-                        color = (0, 255, 0)
+                    if hands_info:
+                        # Use first detected hand for control
+                        hand = hands_info[0]
+                        landmarks = hand['landmarks']
+                        
+                        # Compute gesture data
+                        is_pinching = self.gesture.is_pinching(landmarks)
+                        raw_strength = self.gesture.get_pinch_strength(landmarks)
+                        hand_center = self.gesture.get_hand_center(landmarks)
+                        is_grab = self.gesture.is_grab(landmarks)
+                        
+                        # Update mapper (smoothing + gating)
+                        control = self.mapper.update(is_pinching, raw_strength, hand_center)
+                        
+                        # Add grab/rotation data with raw hand position
+                        control['is_rotating'] = is_grab
+                        control['raw_position'] = list(hand_center)
+                        
+                        # Store in shared dict for 3D app
+                        self.control_data['latest'] = control
+                        
+                        # Draw on camera feed
+                        if self.show_camera:
+                            frame = self.tracker.draw_landmarks(frame)
+                            
+                            if is_grab:
+                                status = "GRAB (Rotate)"
+                                color = (0, 165, 255)
+                            elif is_pinching:
+                                status = "PINCH (Move)"
+                                color = (0, 255, 0)
+                            else:
+                                status = "OPEN"
+                                color = (100, 100, 255)
+                            
+                            cv2.putText(frame, f"{hand['handedness']} Hand - {status}", 
+                                       (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+                            
+                            grab_avg = getattr(self.gesture, '_last_grab_avg', 0)
+                            pinch_dist = self.gesture.get_pinch_distance(landmarks)
+                            cv2.putText(frame, f"Fingers: {grab_avg:.3f}  Pinch: {pinch_dist:.3f}", 
+                                       (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 2)
                     else:
-                        status = "OPEN HAND"
-                        color = (100, 100, 255)
+                        # No hand detected
+                        self.control_data['latest'] = None
+                        
+                        if self.show_camera:
+                            cv2.putText(frame, "No hand detected", (w//2 - 100, h//2), 
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                     
-                    cv2.putText(frame, f"{status}", 
-                               (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+                    # Show camera feed (optional)
+                    if self.show_camera:
+                        cv2.imshow('Hand Tracking', frame)
+                        if cv2.waitKey(1) & 0xFF == ord('q'):
+                            self.running = False
+                            break
+                            
+                except Exception as e:
+                    # Silently continue on frame processing errors
+                    pass
                     
-                    # Show finger distance for debugging
-                    cv2.putText(frame, f"Finger Distance: {avg_dist:.3f} (Fist < 0.18)", 
-                               (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-                    
-                    # Show orientation when grabbing
-                    if is_grabbing:
-                        cv2.putText(frame, f"P:{hand_3d_orientation['pitch']:.0f}° R:{hand_3d_orientation['roll']:.0f}° Y:{hand_3d_orientation['yaw']:.0f}°", 
-                                   (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
-            else:
-                # No hand detected
-                self.control_data['latest'] = None
-                
-                if self.show_camera:
-                    cv2.putText(frame, "No hand detected", (w//2 - 100, h//2), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            
-            # Show camera feed (optional)
+        except Exception as e:
+            print(f"Tracking error: {e}")
+        finally:
+            # Cleanup
+            if cap is not None:
+                cap.release()
             if self.show_camera:
-                cv2.imshow('Hand Tracking', frame)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    self.running = False
-                    break
-        
-        # Cleanup
-        cap.release()
-        if self.show_camera:
-            cv2.destroyAllWindows()
-        self.tracker.close()
+                try:
+                    cv2.destroyAllWindows()
+                except:
+                    pass
+            try:
+                self.tracker.close()
+            except:
+                pass
 
 
 def run_with_3d():
@@ -176,12 +163,15 @@ def run_with_3d():
     tracking.show_camera = True  # Set False to hide camera window
     tracking.start()
     
-    # Run Panda3D in main thread (required for proper rendering)
-    print("Starting Panda3D 3D visualization...")
-    run_3d_app(control_data)
-    
-    # Cleanup
-    tracking.stop()
+    try:
+        # Run Panda3D in main thread (required for proper rendering)
+        print("Starting Panda3D 3D visualization...")
+        run_3d_app(control_data)
+    finally:
+        # Always cleanup, even if there's an error
+        print("Shutting down tracking thread...")
+        tracking.stop()
+        print("Cleanup complete!")
 
 
 if __name__ == "__main__":

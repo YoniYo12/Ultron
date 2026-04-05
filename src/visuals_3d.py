@@ -4,7 +4,6 @@ from panda3d.core import Geom, GeomVertexData, GeomVertexFormat, GeomVertexWrite
 from panda3d.core import GeomTriangles, GeomLines
 from direct.task import Task
 import threading
-import math
 
 
 class HandControlled3DApp(ShowBase):
@@ -40,12 +39,12 @@ class HandControlled3DApp(ShowBase):
         self.setup_ui()
     
     def setup_camera(self):
-        """Setup camera position."""
-        self.camera.setPos(0, -10, 3)
+        """Setup camera position - the working view."""
+        self.camera.setPos(0, -18, 5)
         self.camera.lookAt(0, 0, 0)
         
-        self.setBackgroundColor(0.15, 0.15, 0.2, 1)
-        self.camLens.setFov(60)
+        self.setBackgroundColor(0.2, 0.2, 0.25, 1)
+        self.camLens.setFov(75)
     
     def setup_lighting(self):
         """Setup scene lighting."""
@@ -84,65 +83,50 @@ class HandControlled3DApp(ShowBase):
         
         grid_node = self.render.attachNewNode(lines.create())
     
-    def create_3d_cross(self):
-        """Create a 3D cross with colored arms so rotation is obvious."""
+    def create_colored_cube(self):
+        """Create a cube with each face a different color so rotation is obvious."""
         from panda3d.core import CardMaker
+        cm = CardMaker('card')
+        cm.setFrame(-1, 1, -1, 1)
         
-        node = self.render.attachNewNode('cross')
+        node = self.render.attachNewNode('cube')
         
-        cm = CardMaker('bar')
-        bar_length = 1.0
-        bar_thickness = 0.25
+        # Front (GREEN)
+        front = node.attachNewNode(cm.generate())
+        front.setPos(0, 1, 0)
+        front.setColor(0.2, 1.0, 0.2, 1)
         
-        # X axis bar (RED) - horizontal
-        cm.setFrame(-bar_length, bar_length, -bar_thickness, bar_thickness)
-        x_front = node.attachNewNode(cm.generate())
-        x_front.setColor(1, 0.2, 0.2, 1)
-        x_back = node.attachNewNode(cm.generate())
-        x_back.setH(180)
-        x_back.setColor(1, 0.2, 0.2, 1)
-        x_top = node.attachNewNode(cm.generate())
-        x_top.setP(90)
-        x_top.setColor(0.8, 0.15, 0.15, 1)
-        x_bottom = node.attachNewNode(cm.generate())
-        x_bottom.setP(-90)
-        x_bottom.setColor(0.8, 0.15, 0.15, 1)
+        # Back (RED)
+        back = node.attachNewNode(cm.generate())
+        back.setPos(0, -1, 0)
+        back.setH(180)
+        back.setColor(1.0, 0.2, 0.2, 1)
         
-        # Y axis bar (BLUE) - depth
-        cm.setFrame(-bar_thickness, bar_thickness, -bar_thickness, bar_thickness)
-        for angle in [0, 90, 180, 270]:
-            face = node.attachNewNode(cm.generate())
-            face.setPos(0, 0, 0)
-            face.setH(angle)
-            face.setScale(1, bar_length, 1)
-            face.setColor(0.2, 0.4, 1.0, 1)
+        # Right (BLUE)
+        right = node.attachNewNode(cm.generate())
+        right.setPos(1, 0, 0)
+        right.setH(90)
+        right.setR(90)
+        right.setColor(0.2, 0.4, 1.0, 1)
         
-        # Z axis bar (GREEN) - vertical
-        cm.setFrame(-bar_thickness, bar_thickness, -bar_length, bar_length)
-        z_front = node.attachNewNode(cm.generate())
-        z_front.setColor(0.2, 1, 0.3, 1)
-        z_back = node.attachNewNode(cm.generate())
-        z_back.setH(180)
-        z_back.setColor(0.2, 1, 0.3, 1)
-        z_left = node.attachNewNode(cm.generate())
-        z_left.setH(90)
-        z_left.setColor(0.15, 0.8, 0.2, 1)
-        z_right = node.attachNewNode(cm.generate())
-        z_right.setH(-90)
-        z_right.setColor(0.15, 0.8, 0.2, 1)
+        # Left (YELLOW)
+        left = node.attachNewNode(cm.generate())
+        left.setPos(-1, 0, 0)
+        left.setH(-90)
+        left.setR(90)
+        left.setColor(1.0, 1.0, 0.2, 1)
         
-        # Small center cube to anchor visually
-        cm.setFrame(-bar_thickness*1.5, bar_thickness*1.5, -bar_thickness*1.5, bar_thickness*1.5)
-        for angle in [0, 90, 180, 270]:
-            c = node.attachNewNode(cm.generate())
-            c.setH(angle)
-            c.setColor(1, 1, 1, 1)
-        c_top = node.attachNewNode(cm.generate())
-        c_top.setP(90)
-        c_top.setColor(1, 1, 1, 1)
-        c_bot = node.attachNewNode(cm.generate())
-        c_bot.setP(-90)
-        c_bot.setColor(1, 1, 1, 1)
+        # Top (ORANGE)
+        top = node.attachNewNode(cm.generate())
+        top.setPos(0, 0, 1)
+        top.setP(90)
+        top.setColor(1.0, 0.5, 0.1, 1)
+        
+        # Bottom (PURPLE)
+        bottom = node.attachNewNode(cm.generate())
+        bottom.setPos(0, 0, -1)
+        bottom.setP(-90)
+        bottom.setColor(0.6, 0.2, 1.0, 1)
         
         return node
     
@@ -162,16 +146,18 @@ class HandControlled3DApp(ShowBase):
         return node
     
     def load_model(self):
-        """Load 3D cross model - rotation is obvious from any angle."""
+        """Load colored cube - each face different color so rotation is visible."""
         self.objects = []
         
-        cross = self.create_3d_cross()
-        cross.reparentTo(self.render)
-        cross.setPos(0, 0, 0)
-        cross.setScale(2.0)
-        cross.setTwoSided(True)
+        cube = self.create_colored_cube()
+        cube.reparentTo(self.render)
+        cube.setPos(0, 0, 0)
+        # Uniform scale — thin Z made the cube disappear when roll() turned it edge-on
+        self.base_scale = 0.65
+        cube.setScale(self.base_scale, self.base_scale, self.base_scale)
+        cube.setTwoSided(True)
         
-        self.objects.append({'model': cross, 'name': 'Cross', 'base_scale': 2.0})
+        self.objects.append({'model': cube, 'name': 'Cube', 'base_scale': self.base_scale})
         
         # Set as the active model
         self.selected_index = 0
@@ -181,27 +167,17 @@ class HandControlled3DApp(ShowBase):
         self.rotation_speed = 40
         self.auto_rotate = True
         
-        # Grab-rotate tracking (SpaceX style)
-        self.grab_active = False
-        self.grab_start_pos = [0.5, 0.5]
-        self.grab_start_h = 0.0
-        self.grab_start_p = 0.0
-        
-        from panda3d.core import TextNode
-        text3d = TextNode('label')
-        text3d.setText('R=Red  G=Green  B=Blue')
-        text3d_node = self.render.attachNewNode(text3d)
-        text3d_node.setScale(0.3)
-        text3d_node.setPos(-1.5, 0, 2.5)
-        text3d_node.setBillboardPointEye()
+        # Grab-rotate: movement-based spin (tangential velocity around screen center)
+        self._prev_rotating = False
+        self.target_r = 0.0
+        self.smoothed_r = 0.0
         
         print("="*50)
-        print("3D Cross loaded!")
-        print("  Red bar   = X axis (horizontal)")
-        print("  Green bar = Z axis (vertical)")
-        print("  Blue bar  = Y axis (depth)")
-        print("  White center cube")
+        print("Colored cube loaded!")
+        print("  Front=Green, Back=Red, Right=Blue")
+        print("  Left=Yellow, Top=Orange, Bottom=Purple")
         print(f"Position: {self.model.getPos()}")
+        print(f"Scale: {self.model.getScale()}")
         print(f"Camera: {self.camera.getPos()}")
         print("="*50)
     
@@ -244,7 +220,7 @@ class HandControlled3DApp(ShowBase):
         
         if control is None:
             self.status_text.setText("Waiting for hand...")
-            self.grab_active = False
+            self._prev_rotating = False
             if self.auto_rotate:
                 current_h = self.model.getH()
                 self.model.setH(current_h + self.rotation_speed * globalClock.getDt())
@@ -252,55 +228,59 @@ class HandControlled3DApp(ShowBase):
         
         is_active = control.get('is_active', False)
         is_rotating = control.get('is_rotating', False)
-        raw_pos = control.get('raw_position', [0.5, 0.5, 0.0])
         position = control.get('position', [0.5, 0.5, 0.0])
         
         if is_rotating:
-            # GRAB: Rotate object by moving hand (SpaceX/Iron Man style)
+            # GRAB: rotation from smoothed hand *movement* (mapper deltas), not atan2(center).
+            # Tangential term: r × v in 2D (clockwise motion around center → roll).
             self.auto_rotate = False
             
-            if not self.grab_active:
-                # Grab just started - snapshot starting state
-                self.grab_start_pos = [raw_pos[0], raw_pos[1]]
-                self.grab_start_h = self.model.getH()
-                self.grab_start_p = self.model.getP()
-                self.grab_active = True
+            if not self._prev_rotating:
+                self.target_r = self.model.getR()
+                self.smoothed_r = self.target_r
+            self._prev_rotating = True
             
-            # Hand movement delta from grab start → object rotation
-            dx = raw_pos[0] - self.grab_start_pos[0]  # horizontal movement
-            dy = raw_pos[1] - self.grab_start_pos[1]  # vertical movement
+            gd = control.get('grab_delta_xy', [0.0, 0.0])
+            gp = control.get('grab_position', [0.5, 0.5, 0.0])
+            dx, dy = gd[0], gd[1]
+            gx, gy = gp[0], gp[1]
+            rx = gx - 0.5
+            ry = gy - 0.5
+            omega = rx * dy - ry * dx
+            spin = omega * 2200.0
+            spin -= dx * 520.0
+            # Cap per-frame spin so noise doesn't roll the cube edge-on (invisible)
+            max_spin = 12.0
+            spin = max(-max_spin, min(max_spin, spin))
             
-            # Map hand movement to rotation (300 deg per full screen width)
-            rotation_sensitivity = 300.0
-            new_h = self.grab_start_h - dx * rotation_sensitivity
-            new_p = self.grab_start_p + dy * rotation_sensitivity
+            self.target_r += spin
+            self.smoothed_r += (self.target_r - self.smoothed_r) * 0.42
+            self.model.setR(self.smoothed_r)
+            self.model.setScale(self.base_scale, self.base_scale, self.base_scale)
             
-            self.model.setH(new_h)
-            self.model.setP(new_p)
-            
-            # Orange glow when rotating
             self.model.setColor(1.0, 0.6, 0.1, 1.0)
             self.model.setColorScale(1.3, 1.3, 1.3, 1.0)
-            self.status_text.setText("ROTATING - Move hand to spin object")
+            self.status_text.setText("ROTATING - move hand in an arc")
             
         elif is_active:
             # PINCH: Move the object
             self.auto_rotate = False
-            self.grab_active = False
+            self._prev_rotating = False
             
             x = (position[0] - 0.5) * 6
             z = (0.5 - position[1]) * 4
             y = position[2] * -2
             
             self.model.setPos(x, y, z)
-            self.model.setScale(2.0)
+            self.model.setScale(self.base_scale, self.base_scale, self.base_scale)
             self.model.setColor(0.2, 1.0, 0.2, 1.0)
             self.model.setColorScale(1.5, 1.5, 1.5, 1.0)
             self.status_text.setText("PINCH - Move hand to translate")
             
         else:
             # RELEASED: Hold position and rotation
-            self.grab_active = False
+            self._prev_rotating = False
+            self.model.setScale(self.base_scale, self.base_scale, self.base_scale)
             self.model.setColorScale(1, 1, 1, 1)
             self.model.setColor(0.3, 0.8, 0.3, 1.0)
             self.status_text.setText("OPEN - Object held in place")

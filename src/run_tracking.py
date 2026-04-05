@@ -81,13 +81,9 @@ class TrackingThread:
                         raw_strength = self.gesture.get_pinch_strength(landmarks)
                         hand_center = self.gesture.get_hand_center(landmarks)
                         is_grab = self.gesture.is_grab(landmarks)
-                        
-                        # Update mapper (smoothing + gating)
-                        control = self.mapper.update(is_pinching, raw_strength, hand_center)
-                        
-                        # Add grab/rotation data with raw hand position
-                        control['is_rotating'] = is_grab
-                        control['raw_position'] = list(hand_center)
+                        control = self.mapper.update(
+                            is_pinching, raw_strength, hand_center, is_grab
+                        )
                         
                         # Store in shared dict for 3D app
                         self.control_data['latest'] = control
@@ -109,10 +105,17 @@ class TrackingThread:
                             cv2.putText(frame, f"{hand['handedness']} Hand - {status}", 
                                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
                             
-                            grab_avg = getattr(self.gesture, '_last_grab_avg', 0)
+                            grab_norm = getattr(self.gesture, '_last_grab_norm', 0)
+                            gconf = control.get('grab_confidence', 0)
                             pinch_dist = self.gesture.get_pinch_distance(landmarks)
-                            cv2.putText(frame, f"Fingers: {grab_avg:.3f}  Pinch: {pinch_dist:.3f}", 
-                                       (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 2)
+                            cv2.putText(
+                                frame,
+                                f"Grab norm: {grab_norm:.2f}  conf: {gconf:.2f}  pinch: {pinch_dist:.3f}",
+                                (10, 65),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                                (200, 200, 200),
+                                2,
+                            )
                     else:
                         # No hand detected
                         self.control_data['latest'] = None

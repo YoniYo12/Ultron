@@ -180,29 +180,40 @@ class GestureRecognizer:
         angle = math.degrees(math.atan2(dy, dx))
         return angle
     
-    def is_grab(self, hand_landmarks):
-        """
-        Detect grab gesture: hand closed (fist or claw) but NOT pinching.
-        Like grabbing an object to rotate it (SpaceX/Iron Man style).
-        Mutually exclusive with pinch by design.
-        """
-        if self.is_pinching(hand_landmarks):
-            return False
-
+    def get_hand_scale(self, hand_landmarks):
+        """Wrist to middle MCP — reference length for scale-invariant ratios."""
         wrist = hand_landmarks[self.WRIST]
+        mid_mcp = hand_landmarks[9]
+        return max(self.calculate_distance(wrist, mid_mcp), 1e-6)
 
+    def get_normalized_finger_span(self, hand_landmarks):
+        """
+        Average fingertip-to-wrist distance divided by hand scale.
+        ~0.35–0.55: tight fist; ~0.55–0.75: grab; ~0.9+: open palm.
+        """
+        wrist = hand_landmarks[self.WRIST]
         tip_distances = [
             self.calculate_distance(wrist, hand_landmarks[self.INDEX_TIP]),
             self.calculate_distance(wrist, hand_landmarks[self.MIDDLE_TIP]),
             self.calculate_distance(wrist, hand_landmarks[self.RING_TIP]),
-            self.calculate_distance(wrist, hand_landmarks[self.PINKY_TIP])
+            self.calculate_distance(wrist, hand_landmarks[self.PINKY_TIP]),
         ]
         avg_dist = sum(tip_distances) / len(tip_distances)
+        scale = self.get_hand_scale(hand_landmarks)
+        return avg_dist / scale
 
-        self._last_grab_avg = avg_dist
+    def is_grab(self, hand_landmarks):
+        """
+        Grab: closed hand, not pinching. Thresholds use normalized span (camera-distance invariant).
+        """
+        if self.is_pinching(hand_landmarks):
+            return False
 
-        # Anything below open palm = grab (fist, claw, loose grip all count)
-        return avg_dist < 0.23
+        norm_span = self.get_normalized_finger_span(hand_landmarks)
+        self._last_grab_norm = norm_span
+
+        # Below ~0.78: fingers pulled in relative to palm size (fist / claw)
+        return norm_span < 0.78
 
     def get_hand_roll(self, hand_landmarks):
         """

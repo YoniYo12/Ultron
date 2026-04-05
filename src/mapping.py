@@ -31,6 +31,13 @@ class ValueMapper:
         # State tracking
         self.is_active = False
         self.was_active_last_frame = False
+        self.was_grab_last_frame = False
+
+        # Grab (rotate) pipeline — smoothed confidence + position for delta-based rotation
+        self.grab_confidence = 0.0
+        self.grab_smoothed_position = [0.5, 0.5, 0.0]
+        self._grab_prev_smoothed = [0.5, 0.5, 0.0]
+        self.grab_delta_xy = [0.0, 0.0]
         
     def smooth_value(self, current_value, smoothed_value):
         """
@@ -62,62 +69,67 @@ class ValueMapper:
             self.position_smoothing_factor * current_pos[2] + (1 - self.position_smoothing_factor) * smoothed_pos[2]
         ]
     
-    def update(self, is_pinching, pinch_strength, hand_center):
+    def update(self, is_pinching, pinch_strength, hand_center, is_grab=False):
         """
-        Update smoothed values with gating based on pinch state.
-        
-        RULE: Only update when pinching, otherwise hold last value.
-        OPTIMIZATION: Fast catch-up on pinch start to remove lag.
-        
-        Args:
-            is_pinching: True if currently pinching
-            pinch_strength: Current pinch strength (0-1)
-            hand_center: [x, y, z] hand center position
-            
-        Returns:
-            dict: Contains 'pinch_strength' and 'position' (gated & smoothed)
+        Pinch has priority over grab. Grab uses the same light position smoothing
+        while active, plus confidence EMA so the pipeline isn't "bolted on" raw.
+
+        Returns position deltas for rotation (movement-based, not screen-center angle).
         """
+        grab_rate = 0.32
+        self.grab_delta_xy = [0.0, 0.0]
+
         if is_pinching:
-            # Detect pinch start (transition from inactive to active)
             pinch_just_started = is_pinching and not self.was_active_last_frame
-            
             if pinch_just_started:
-                # FAST CATCH-UP: Snap strength closer, position directly
                 self.smoothed_pinch_strength = self.catch_up_factor * pinch_strength + (1 - self.catch_up_factor) * self.smoothed_pinch_strength
-                # Position: snap almost directly to hand on grab
                 self.smoothed_hand_position = [
                     0.9 * hand_center[0] + 0.1 * self.smoothed_hand_position[0],
                     0.9 * hand_center[1] + 0.1 * self.smoothed_hand_position[1],
-                    0.9 * hand_center[2] + 0.1 * self.smoothed_hand_position[2]
+                    0.9 * hand_center[2] + 0.1 * self.smoothed_hand_position[2],
                 ]
             else:
-                # NORMAL: Smooth strength, light smooth position
-                self.smoothed_pinch_strength = self.smooth_value(
-                    pinch_strength, 
-                    self.smoothed_pinch_strength
-                )
-                # Position follows hand directly (minimal smoothing)
-                self.smoothed_hand_position = self.smooth_position(
-                    hand_center,
-                    self.smoothed_hand_position
-                )
-            
-            # Save as held values
+                self.smoothed_pinch_strength = self.smooth_value(pinch_strength, self.smoothed_pinch_strength)
+                self.smoothed_hand_position = self.smooth_position(hand_center, self.smoothed_hand_position)
             self.held_pinch_strength = self.smoothed_pinch_strength
             self.held_hand_position = self.smoothed_hand_position.copy()
             self.is_active = True
+            self.grab_confidence *= 0.85
         else:
-            # INACTIVE: Hold last valid value
-            # Don't update, just return held values
             self.is_active = False
-        
-        # Update state tracking for next frame
+            if is_grab:
+                self.grab_confidence = min(1.0, self.grab_confidence + grab_rate)
+                grab_just_started = is_grab and not self.was_grab_last_frame
+                if grab_just_started:
+                    self.grab_smoothed_position = [
+                        0.92 * hand_center[0] + 0.08 * self.grab_smoothed_position[0],
+                        0.92 * hand_center[1] + 0.08 * self.grab_smoothed_position[1],
+                        0.92 * hand_center[2] + 0.08 * self.grab_smoothed_position[2],
+                    ]
+                    self._grab_prev_smoothed = self.grab_smoothed_position.copy()
+                else:
+                    self.grab_smoothed_position = self.smooth_position(hand_center, self.grab_smoothed_position)
+                self.grab_delta_xy = [
+                    self.grab_smoothed_position[0] - self._grab_prev_smoothed[0],
+                    self.grab_smoothed_position[1] - self._grab_prev_smoothed[1],
+                ]
+                self._grab_prev_smoothed = self.grab_smoothed_position.copy()
+            else:
+                self.grab_confidence = max(0.0, self.grab_confidence - grab_rate * 1.2)
+
         self.was_active_last_frame = is_pinching
-        
+        self.was_grab_last_frame = is_grab
+
+        is_rotating = (not is_pinching) and (self.grab_confidence > 0.68)
+
         return {
             'pinch_strength': self.held_pinch_strength,
             'position': self.held_hand_position,
-            'is_active': is_pinching
+            'is_active': is_pinching,
+            'is_rotating': is_rotating,
+            'grab_position': self.grab_smoothed_position.copy(),
+            'grab_delta_xy': list(self.grab_delta_xy),
+            'grab_confidence': self.grab_confidence,
         }
     
     def map_to_radius(self, pinch_strength, min_radius=20, max_radius=200):
@@ -172,6 +184,11 @@ class ValueMapper:
         self.held_pinch_strength = 0.0
         self.held_hand_position = [0.5, 0.5, 0.0]
         self.is_active = False
+        self.was_grab_last_frame = False
+        self.grab_confidence = 0.0
+        self.grab_smoothed_position = [0.5, 0.5, 0.0]
+        self._grab_prev_smoothed = [0.5, 0.5, 0.0]
+        self.grab_delta_xy = [0.0, 0.0]
 
 
 class VisualFeedback:
@@ -338,7 +355,7 @@ if __name__ == "__main__":
             hand_center = gesture.get_hand_center(landmarks)
             
             # Update mapper with gating
-            control_data = mapper.update(is_pinching, raw_strength, hand_center)
+            control_data = mapper.update(is_pinching, raw_strength, hand_center, False)
             
             # Get smoothed & gated values
             smoothed_strength = control_data['pinch_strength']
